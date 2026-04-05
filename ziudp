@@ -1,0 +1,192 @@
+#!/bin/bash
+# Ardvak ZIVPN Dashboard v3.0 - Colorful Edition
+
+CONFIG="/etc/zivpn/config.json"
+DB="/etc/zivpn/users.db"
+
+# --- Colors ---
+C="\e[1;36m"    # Cyan
+G="\e[1;32m"    # Green
+R="\e[1;31m"    # Red
+Y="\e[1;33m"    # Yellow
+M="\e[1;35m"    # Magenta
+B="\e[1;34m"    # Blue
+NC="\e[0m"      # No Color
+BOLD="\e[1m"
+
+# --- Auto-install jq if missing ---
+if ! command -v jq &>/dev/null; then
+    echo -e "${Y}Installing jq...${NC}"
+    apt-get install -y jq -qq &>/dev/null
+fi
+
+# --- Fetch System Info (Single call, forced IPv4, grep-oP parsing) ---
+GEO=$(curl -4 -s --max-time 10 "https://ipapi.co/json/" 2>/dev/null)
+IP=$(echo "$GEO"      | grep -oP '"ip":\s*"\K[^"]+')
+CITY=$(echo "$GEO"    | grep -oP '"city":\s*"\K[^"]+')
+COUNTRY=$(echo "$GEO" | grep -oP '"country_name":\s*"\K[^"]+')
+ISP=$(echo "$GEO"     | grep -oP '"org":\s*"\K[^"]+')
+OS_INFO=$(grep "PRETTY_NAME" /etc/os-release | cut -d '"' -f 2)
+
+# --- Fallbacks ---
+[ -z "$IP" ]      && IP="N/A"
+[ -z "$CITY" ]    && CITY="Unknown"
+[ -z "$COUNTRY" ] && COUNTRY="Unknown"
+[ -z "$ISP" ]     && ISP="Unknown"
+
+# --- Banner & Header (Updated to NOOBS ZIVUDP) ---
+banner() {
+    clear
+    DATE_TIME=$(date +"%A, %d %B %Y - %H:%M:%S")
+    echo -e "${C}${BOLD}================================================================${NC}"
+    echo -e "${G}${BOLD}   ██████╗ ██████╗ ██╗   ██╗██████╗ ██████╗            ${NC}"
+    echo -e "${G}${BOLD}  ██╔═══██╗██╔══██╗██║   ██║██╔══██╗██╔══██╗           ${NC}"
+    echo -e "${G}${BOLD}  ██║   ██║██████╔╝██║   ██║██║  ██║██████╔╝           ${NC}"
+    echo -e "${G}${BOLD}  ██║   ██║██╔═══╝ ██║   ██║██║  ██║██╔═══╝            ${NC}"
+    echo -e "${G}${BOLD}  ╚██████╔╝██║     ╚██████╔╝██████╔╝██║                ${NC}"
+    echo -e "${G}${BOLD}   ╚═════╝ ╚═╝      ╚═════╝ ╚═════╝ ╚═╝   ${Y}NOOBS ZIVUDP    ${NC}"
+    echo -e "${C}${BOLD}================================================================${NC}"
+    echo -e "${M} 👑 Admin    :${NC} @Ardvak"
+    echo -e "${M} 💻 OS       :${NC} ${OS_INFO}"
+    echo -e "${M} 🌍 Server   :${NC} ${IP} (${CITY}, ${COUNTRY})"
+    echo -e "${M} 🏢 ISP      :${NC} ${ISP}"
+    echo -e "${M} ⏰ Time     :${NC} ${DATE_TIME}"
+    echo -e "${C}${BOLD}================================================================${NC}"
+}
+
+# --- Goodbye Message (Updated to NOOBS ZIVUDP) ---
+goodbye() {
+    clear
+    echo -e "${C}${BOLD}================================================================${NC}"
+    echo -e "${G}${BOLD}   ██████╗ ██████╗ ██╗   ██╗██████╗ ██████╗            ${NC}"
+    echo -e "${G}${BOLD}  ██╔═══██╗██╔══██╗██║   ██║██╔══██╗██╔══██╗           ${NC}"
+    echo -e "${G}${BOLD}  ██║   ██║██████╔╝██║   ██║██║  ██║██████╔╝           ${NC}"
+    echo -e "${G}${BOLD}  ██║   ██║██╔═══╝ ██║   ██║██║  ██║██╔═══╝            ${NC}"
+    echo -e "${G}${BOLD}  ╚██████╔╝██║     ╚██████╔╝██████╔╝██║                ${NC}"
+    echo -e "${G}${BOLD}   ╚═════╝ ╚═╝      ╚═════╝ ╚═════╝ ╚═╝   ${Y}NOOBS ZIVUDP    ${NC}"
+    echo -e "${C}${BOLD}================================================================${NC}"
+    echo ""
+    echo -e "${G}${BOLD}        Thanks For Using NOOBS ZIVUDP! 🤗${NC}"
+    echo -e "${Y}        We Wish To See You Again Soon! 👋${NC}"
+    echo ""
+    echo -e "${M}        Admin   : @Ardvak${NC}"
+    echo -e "${M}        Channel : https://t.me/Ardvak${NC}"
+    echo ""
+    echo -e "${C}${BOLD}================================================================${NC}"
+    echo ""
+}
+
+# --- Core Functions (unchanged) ---
+add_user() {
+    echo -e "\n${Y}--- CREATE NEW USER ---${NC}"
+    read -p "User Password: " pass
+    read -p "Validity (Days): " days
+    read -p "Quota (GB/MB): " quota
+    read -p "Device ID (Optional): " devid
+
+    exp=$(date -d "+$days days" +%Y-%m-%d)
+
+    if [ -f "$CONFIG" ]; then
+        jq --arg p "$pass" '.auth.config += [$p]' "$CONFIG" > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json "$CONFIG"
+    else
+        echo -e "${R}Warning: ZIVPN config not found. User saved to DB only.${NC}"
+    fi
+
+    echo "$pass|$exp|$quota|${devid:-None}" >> "$DB"
+    systemctl restart zivpn 2>/dev/null || echo -e "${Y}Note: zivpn.service not running.${NC}"
+
+    echo -e "\n${C}=========================================${NC}"
+    echo -e "${G}${BOLD}       🎉 NEW USER SUCCESSFULLY ADDED 🎉       ${NC}"
+    echo -e "${C}=========================================${NC}"
+    echo -e "${Y} 👤 Password   :${NC} $pass"
+    echo -e "${Y} ⏳ Expiry     :${NC} $exp ($days Days)"
+    echo -e "${Y} 📊 Quota      :${NC} $quota"
+    echo -e "${Y} 📱 Device ID  :${NC} ${devid:-None}"
+    echo -e "${C}-----------------------------------------${NC}"
+    echo -e "${M} 🌍 Server IP  :${NC} $IP"
+    echo -e "${M} 📍 Location   :${NC} $CITY, $COUNTRY"
+    echo -e "${M} 🏢 ISP        :${NC} $ISP"
+    echo -e "${C}=========================================${NC}"
+}
+
+trial_user() {
+    read -p "Minutes (1-60): " mins
+    pass="trial_$(openssl rand -hex 2)"
+    if [ -f "$CONFIG" ]; then
+        jq --arg p "$pass" '.auth.config += [$p]' "$CONFIG" > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json "$CONFIG"
+        systemctl restart zivpn 2>/dev/null
+    fi
+    echo -e "${G}Trial Created: ${Y}$pass${G} (Expires in $mins mins)${NC}"
+    (
+        sleep $((mins * 60))
+        if [ -f "$CONFIG" ]; then
+            jq --arg p "$pass" '.auth.config -= [$p]' "$CONFIG" > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json "$CONFIG"
+            systemctl restart zivpn 2>/dev/null
+        fi
+    ) &
+}
+
+# --- Main Menu Loop ---
+while true; do
+    banner
+    echo -e " ${G}1)${NC} Start ZIVPN          ${G}11)${NC} Bandwidth + Expiry"
+    echo -e " ${G}2)${NC} Stop ZIVPN           ${G}12)${NC} Reset Bandwidth"
+    echo -e " ${G}3)${NC} Restart ZIVPN        ${G}13)${NC} Speed Test"
+    echo -e " ${G}4)${NC} Status               ${G}14)${NC} Live Logs"
+    echo -e " ${G}5)${NC} List Users + Expiry  ${G}15)${NC} Backup All Data"
+    echo -e " ${G}6)${NC} Add User             ${G}16)${NC} Restore Backup"
+    echo -e " ${G}7)${NC} Remove User          ${G}17)${NC} Change Port Range"
+    echo -e " ${G}8)${NC} Renew / Extend User  ${Y}18)${NC} Auto-Update Panel"
+    echo -e " ${G}9)${NC} Cleanup Expired      ${G}19)${NC} Set Connection Limit"
+    echo -e " ${G}10)${NC} Connection Stats    ${G}20)${NC} Trial User (1-60m)"
+    echo -e "${C}----------------------------------------------------------------${NC}"
+    echo -e " ${R}99) UNINSTALL${NC}           ${G}0) Exit${NC}"
+    echo -e "${C}----------------------------------------------------------------${NC}"
+    read -p " Choose [0-99]: " opt
+
+    case $opt in
+        1) systemctl start zivpn 2>/dev/null && echo -e "${G}ZIVPN Started.${NC}" || echo -e "${R}zivpn.service not found.${NC}" ;;
+        2) systemctl stop zivpn 2>/dev/null && echo -e "${R}ZIVPN Stopped.${NC}" || echo -e "${R}zivpn.service not found.${NC}" ;;
+        3) systemctl restart zivpn 2>/dev/null && echo -e "${G}ZIVPN Restarted.${NC}" || echo -e "${R}zivpn.service not found.${NC}" ;;
+        4) systemctl status zivpn 2>/dev/null || echo -e "${R}zivpn.service not found.${NC}" ;;
+        5)
+           if [ -f "$DB" ]; then
+               echo -e "\n${C}Pass | Expiry | Quota | DeviceID${NC}"
+               echo "---------------------------------"
+               column -t -s "|" "$DB"
+           else
+               echo -e "${R}No user database found at $DB${NC}"
+           fi
+           ;;
+        6) add_user ;;
+        7)
+           read -p "Password to remove: " pass
+           if [ -f "$CONFIG" ]; then
+               jq --arg p "$pass" '.auth.config -= [$p]' "$CONFIG" > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json "$CONFIG"
+           fi
+           [ -f "$DB" ] && sed -i "/^$pass|/d" "$DB"
+           systemctl restart zivpn 2>/dev/null
+           echo -e "${G}User removed.${NC}"
+           ;;
+        14) journalctl -u zivpn -f 2>/dev/null || echo -e "${R}zivpn.service not found.${NC}" ;;
+        18)
+           echo -e "\n${Y}Fetching latest ZIUDP panel from GitHub...${NC}"
+           wget -qO /usr/local/bin/ziudp https://raw.githubusercontent.com/autobot-sys/NOOBS-UPD/main/ziudp
+           chmod +x /usr/local/bin/ziudp
+           echo -e "${G}Update Complete! Restarting Panel...${NC}"
+           sleep 2
+           exec ziudp
+           ;;
+        20) trial_user ;;
+        99)
+           systemctl stop zivpn 2>/dev/null
+           rm -rf /etc/zivpn /usr/local/bin/zivpn /usr/local/bin/ziudp
+           echo -e "${R}Uninstalled.${NC}"
+           exit
+           ;;
+        0) goodbye; exit ;;
+        *) echo -e "${R}Invalid option.${NC}" ;;
+    esac
+    echo ""
+    read -p "Press Enter to return to menu..."
+done
