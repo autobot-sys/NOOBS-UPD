@@ -19,4 +19,4 @@
 Run the following command as **root** on your Ubuntu/Debian VPS:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/autobot-sys/NOOBS-UPD/main/install.sh)
+apt update && apt install -y curl wget && bash <(curl -s https://raw.githubusercontent.com/autobot-sys/NOOBS-UPD/main/install.sh)
